@@ -1,0 +1,79 @@
+[project]
+name = "argus"
+version = "0.1.0"
+description = "AI-powered incident intelligence for distributed systems"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "argus-common",
+    "argus-ingestion",
+    "argus-processor",
+    "argus-incidents",
+    "argus-rca-agent",
+    "argus-api",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["libs/*", "services/*"]
+
+[tool.uv.sources]
+argus-common = { workspace = true }
+argus-ingestion = { workspace = true }
+argus-processor = { workspace = true }
+argus-incidents = { workspace = true }
+argus-rca-agent = { workspace = true }
+argus-api = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "pre-commit>=4.0",
+    "httpx2>=2.16",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "ASYNC", "RUF", "PL"]
+ignore = ["PLR0913", "PLR2004"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["argus_*"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+mypy_path = [
+    "libs/common/src",
+    "services/ingestion/src",
+    "services/processor/src",
+    "services/incidents/src",
+    "services/rca-agent/src",
+    "services/api/src",
+]
+files = ["libs/*/src", "services/*/src"]
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = ["aiokafka.*", "prometheus_client.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "--import-mode=importlib -q"
+testpaths = ["libs", "services"]
+
+[tool.coverage.run]
+source = ["libs", "services"]
+omit = ["*/tests/*"]
