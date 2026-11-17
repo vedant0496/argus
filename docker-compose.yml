@@ -1,0 +1,99 @@
+name: argus
+
+x-service: &service
+  env_file: .env.example
+  environment: &service-env
+    ARGUS_KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+    ARGUS_REDIS_URL: redis://redis:6379/0
+    ARGUS_DATABASE_URL: postgresql://argus:argus@timescaledb:5432/argus
+    ARGUS_LOG_JSON: "true"
+  depends_on:
+    topics:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+    timescaledb:
+      condition: service_healthy
+  profiles: [apps]
+  restart: unless-stopped
+
+services:
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.7
+    command:
+      - redpanda start
+      - --smp 1
+      - --memory 1G
+      - --overprovisioned
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+    ports: ["19092:19092", "9644:9644"]
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true'"]
+      interval: 5s
+      retries: 20
+
+  topics:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.7
+    entrypoint: ["/bin/bash", "/scripts/create-topics.sh"]
+    volumes: ["./deploy/redpanda:/scripts:ro"]
+    depends_on:
+      redpanda:
+        condition: service_healthy
+
+  console:
+    image: docker.redpanda.com/redpandadata/console:v2.7.2
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+    ports: ["8080:8080"]
+    depends_on: [redpanda]
+
+  timescaledb:
+    image: timescale/timescaledb:2.17.2-pg16
+    environment:
+      POSTGRES_USER: argus
+      POSTGRES_PASSWORD: argus
+      POSTGRES_DB: argus
+    ports: ["5432:5432"]
+    volumes: ["timescale-data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U argus"]
+      interval: 5s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+
+  ingestion:
+    <<: *service
+    build: { context: ., args: { SERVICE: ingestion } }
+    environment: { <<: *service-env, ARGUS_HTTP_PORT: "8001" }
+    ports: ["8001:8001"]
+
+  processor:
+    <<: *service
+    build: { context: ., args: { SERVICE: processor } }
+
+  incidents:
+    <<: *service
+    build: { context: ., args: { SERVICE: incidents } }
+
+  rca-agent:
+    <<: *service
+    build: { context: ., args: { SERVICE: rca-agent } }
+    environment: { <<: *service-env, ARGUS_HTTP_PORT: "8003" }
+    ports: ["8003:8003"]
+
+  api:
+    <<: *service
+    build: { context: ., args: { SERVICE: api } }
+    environment: { <<: *service-env, ARGUS_HTTP_PORT: "8000" }
+    ports: ["8000:8000"]
+
+volumes:
+  timescale-data:
