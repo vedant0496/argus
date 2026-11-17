@@ -1,0 +1,19 @@
+[project]
+name = "argus-processor"
+version = "0.1.0"
+description = "Streaming anomaly detection over metric time series"
+requires-python = ">=3.12"
+dependencies = ["argus-common"]
+
+[project.scripts]
+argus-processor = "argus_processor.__main__:main"
+
+[tool.uv.sources]
+argus-common = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/argus_processor"]
